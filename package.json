@@ -27,7 +27,7 @@
     "tree",
     "explorer"
   ],
-  "icon": "images/icon.png",
+  "icon": "images/go-coverage.png",
   "galleryBanner": {
     "color": "#00ADD8",
     "theme": "dark"
