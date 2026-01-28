@@ -1,0 +1,173 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { CoverageService } from './services/coverage-service';
+import { CoverageDecorationProvider } from './providers/coverage-decoration-provider';
+import { CoverageTreeProvider } from './providers/coverage-tree-provider';
+import { InlineCoverageProvider } from './providers/inline-coverage-provider';
+import { CoverageWatcher } from './watchers/coverage-watcher';
+import { StatusBarManager } from './ui/status-bar';
+import { CoverageCommands } from './commands/coverage-commands';
+import { CoverageConfig, CoverageReport, ThresholdConfig } from './models/coverage';
+
+let coverageService: CoverageService;
+let decorationProvider: CoverageDecorationProvider;
+let treeProvider: CoverageTreeProvider;
+let inlineCoverageProvider: InlineCoverageProvider;
+let coverageWatcher: CoverageWatcher;
+let statusBarManager: StatusBarManager;
+let coverageCommands: CoverageCommands;
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    return;
+  }
+
+  const workspaceRoot = workspaceFolder.uri.fsPath;
+  const config = getConfig();
+  const thresholds = getThresholds(config);
+
+  coverageService = new CoverageService(workspaceRoot);
+  await coverageService.initialize();
+
+  decorationProvider = new CoverageDecorationProvider(thresholds);
+  context.subscriptions.push(
+    vscode.window.registerFileDecorationProvider(decorationProvider)
+  );
+
+  treeProvider = new CoverageTreeProvider(thresholds);
+  const treeView = vscode.window.createTreeView('goCoverageTree', {
+    treeDataProvider: treeProvider,
+    showCollapseAll: true
+  });
+  context.subscriptions.push(treeView);
+
+  inlineCoverageProvider = new InlineCoverageProvider();
+  context.subscriptions.push(inlineCoverageProvider);
+
+  statusBarManager = new StatusBarManager(thresholds);
+  context.subscriptions.push(statusBarManager);
+
+  const onCoverageUpdated = (report: CoverageReport | null) => {
+    decorationProvider.updateCoverage(report);
+    treeProvider.updateCoverage(report);
+    inlineCoverageProvider.updateCoverage(report);
+    statusBarManager.updateCoverage(report);
+    
+    vscode.commands.executeCommand(
+      'setContext',
+      'goCoverage.hasCoverageData',
+      report !== null
+    );
+  };
+
+  coverageCommands = new CoverageCommands(
+    context,
+    coverageService,
+    onCoverageUpdated,
+    getConfig
+  );
+  coverageCommands.registerCommands();
+
+  if (config.autoWatch) {
+    coverageWatcher = new CoverageWatcher(
+      async (filePath: string) => {
+        const result = await coverageService.loadCoverage(filePath);
+        if (result.success && result.report) {
+          onCoverageUpdated(result.report);
+        }
+      },
+      () => {
+        onCoverageUpdated(null);
+      }
+    );
+
+    coverageWatcher.watch([
+      '**/coverage.out',
+      '**/coverage.lcov',
+      '**/*.lcov'
+    ]);
+
+    context.subscriptions.push(coverageWatcher);
+  }
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('goCoverage')) {
+        const newConfig = getConfig();
+        const newThresholds = getThresholds(newConfig);
+        
+        decorationProvider.updateThresholds(newThresholds);
+        decorationProvider.setEnabled(newConfig.showDecorations);
+        
+        treeProvider.updateThresholds(newThresholds);
+        
+        inlineCoverageProvider.setEnabled(newConfig.showInlineHints);
+        
+        statusBarManager.updateThresholds(newThresholds);
+      }
+    })
+  );
+
+  await loadExistingCoverage(workspaceRoot, config, onCoverageUpdated);
+
+  console.log('Go Coverage Tree extension activated');
+}
+
+async function loadExistingCoverage(
+  workspaceRoot: string,
+  config: CoverageConfig,
+  onCoverageUpdated: (report: CoverageReport | null) => void
+): Promise<void> {
+  const coverageFiles = [
+    config.coverageFilePath,
+    'coverage.out',
+    'coverage.lcov'
+  ];
+
+  for (const fileName of coverageFiles) {
+    const filePath = path.join(workspaceRoot, fileName);
+    try {
+      const result = await coverageService.loadCoverage(filePath);
+      if (result.success && result.report) {
+        onCoverageUpdated(result.report);
+        return;
+      }
+    } catch {
+      continue;
+    }
+  }
+}
+
+function getConfig(): CoverageConfig {
+  const config = vscode.workspace.getConfiguration('goCoverage');
+  
+  return {
+    coverageFilePath: config.get('coverageFilePath', 'coverage.out'),
+    autoWatch: config.get('autoWatch', true),
+    showDecorations: config.get('showDecorations', true),
+    showInlineHints: config.get('showInlineHints', true),
+    threshold: {
+      low: config.get('threshold.low', 50),
+      medium: config.get('threshold.medium', 80)
+    },
+    testFlags: config.get('testFlags', '-v -race'),
+    excludePatterns: config.get('excludePatterns', [
+      '**/vendor/**',
+      '**/*_test.go',
+      '**/mock_*.go',
+      '**/mocks/**'
+    ])
+  };
+}
+
+function getThresholds(config: CoverageConfig): ThresholdConfig {
+  return {
+    low: config.threshold.low,
+    medium: config.threshold.medium
+  };
+}
+
+export function deactivate(): void {
+  console.log('Go Coverage Tree extension deactivated');
+}

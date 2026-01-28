@@ -1,0 +1,259 @@
+{
+  "name": "go-coverage-tree",
+  "displayName": "Go Coverage Tree",
+  "description": "Visualize Go test coverage in file explorer with GoLand-like decorations and percentage bars",
+  "version": "1.0.0",
+  "publisher": "mkmlsvt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mkmlsvt/go-coverage-tree"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Testing",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "go",
+    "golang",
+    "coverage",
+    "test",
+    "visualization",
+    "goland",
+    "tree",
+    "explorer"
+  ],
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#00ADD8",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "workspaceContains:**/*.go",
+    "workspaceContains:go.mod",
+    "workspaceContains:coverage.out",
+    "workspaceContains:coverage.lcov"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "goCoverage.runTests",
+        "title": "Run Tests with Coverage",
+        "category": "Go Coverage",
+        "icon": "$(play)"
+      },
+      {
+        "command": "goCoverage.runPackageTests",
+        "title": "Run Package Tests with Coverage",
+        "category": "Go Coverage",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "goCoverage.loadCoverage",
+        "title": "Load Coverage File",
+        "category": "Go Coverage",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "goCoverage.clearCoverage",
+        "title": "Clear Coverage Data",
+        "category": "Go Coverage",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "goCoverage.showReport",
+        "title": "Show Coverage Report",
+        "category": "Go Coverage",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "goCoverage.refresh",
+        "title": "Refresh Coverage",
+        "category": "Go Coverage",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "goCoverage.toggleDecorations",
+        "title": "Toggle File Decorations",
+        "category": "Go Coverage",
+        "icon": "$(eye)"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "goCoverageTree",
+          "name": "Go Coverage",
+          "icon": "$(graph)",
+          "contextualTitle": "Go Coverage"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "goCoverageTree",
+        "contents": "No coverage data loaded.\n[Run Tests with Coverage](command:goCoverage.runTests)\n[Load Coverage File](command:goCoverage.loadCoverage)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "goCoverage.refresh",
+          "when": "view == goCoverageTree",
+          "group": "navigation"
+        },
+        {
+          "command": "goCoverage.runTests",
+          "when": "view == goCoverageTree",
+          "group": "navigation"
+        },
+        {
+          "command": "goCoverage.clearCoverage",
+          "when": "view == goCoverageTree",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "goCoverage.runPackageTests",
+          "when": "explorerResourceIsFolder",
+          "group": "6_coverage"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "goCoverage.runTests",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "goCoverage.loadCoverage",
+          "when": "workspaceFolderCount > 0"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Go Coverage Tree",
+      "properties": {
+        "goCoverage.coverageFilePath": {
+          "type": "string",
+          "default": "coverage.out",
+          "description": "Path to the coverage file (relative to workspace root)"
+        },
+        "goCoverage.autoWatch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically watch for coverage file changes"
+        },
+        "goCoverage.showDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show coverage decorations in file explorer"
+        },
+        "goCoverage.showInlineHints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline coverage hints in editor"
+        },
+        "goCoverage.threshold.low": {
+          "type": "number",
+          "default": 50,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Coverage below this percentage is shown in red"
+        },
+        "goCoverage.threshold.medium": {
+          "type": "number",
+          "default": 80,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Coverage below this percentage is shown in yellow"
+        },
+        "goCoverage.testFlags": {
+          "type": "string",
+          "default": "-v -race",
+          "description": "Additional flags to pass to go test"
+        },
+        "goCoverage.excludePatterns": {
+          "type": "array",
+          "default": [
+            "**/vendor/**",
+            "**/*_test.go",
+            "**/mock_*.go",
+            "**/mocks/**"
+          ],
+          "description": "Glob patterns to exclude from coverage display"
+        }
+      }
+    },
+    "colors": [
+      {
+        "id": "goCoverage.coveredBackground",
+        "description": "Background color for covered lines",
+        "defaults": {
+          "dark": "#2d5a2d40",
+          "light": "#90EE9040"
+        }
+      },
+      {
+        "id": "goCoverage.uncoveredBackground",
+        "description": "Background color for uncovered lines",
+        "defaults": {
+          "dark": "#5a2d2d40",
+          "light": "#FFB6C140"
+        }
+      },
+      {
+        "id": "goCoverage.highCoverage",
+        "description": "Color for high coverage (>80%)",
+        "defaults": {
+          "dark": "#4EC9B0",
+          "light": "#008000"
+        }
+      },
+      {
+        "id": "goCoverage.mediumCoverage",
+        "description": "Color for medium coverage (50-80%)",
+        "defaults": {
+          "dark": "#CCA700",
+          "light": "#B8860B"
+        }
+      },
+      {
+        "id": "goCoverage.lowCoverage",
+        "description": "Color for low coverage (<50%)",
+        "defaults": {
+          "dark": "#F14C4C",
+          "light": "#CD5C5C"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "lint:fix": "eslint src --ext ts --fix",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "minimatch": "^9.0.3"
+  }
+}
