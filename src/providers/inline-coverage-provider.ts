@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import { minimatch } from 'minimatch';
 import { CoverageReport, FileCoverage } from '../models/coverage';
 
 export class InlineCoverageProvider {
@@ -6,9 +8,11 @@ export class InlineCoverageProvider {
   private uncoveredDecorationType: vscode.TextEditorDecorationType;
   private coverageReport: CoverageReport | null = null;
   private enabled: boolean = true;
+  private excludePatterns: string[] = [];
   private disposables: vscode.Disposable[] = [];
 
-  constructor() {
+  constructor(excludePatterns: string[] = []) {
+    this.excludePatterns = excludePatterns;
     this.coveredDecorationType = vscode.window.createTextEditorDecorationType({
       backgroundColor: new vscode.ThemeColor('goCoverage.coveredBackground'),
       isWholeLine: true,
@@ -48,6 +52,23 @@ export class InlineCoverageProvider {
     this.updateAllEditors();
   }
 
+  updateExcludePatterns(patterns: string[]): void {
+    this.excludePatterns = patterns;
+    this.updateAllEditors();
+  }
+
+  private isExcluded(filePath: string): boolean {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    
+    for (const pattern of this.excludePatterns) {
+      if (minimatch(normalizedPath, pattern, { dot: true })) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
   private updateAllEditors(): void {
     for (const editor of vscode.window.visibleTextEditors) {
       this.updateDecorations(editor);
@@ -61,7 +82,17 @@ export class InlineCoverageProvider {
       return;
     }
 
-    const fileCoverage = this.findFileCoverage(editor.document.uri.fsPath);
+    const fsPath = editor.document.uri.fsPath;
+    
+    // Check exclude patterns
+    const relativePath = path.relative(this.coverageReport.workspaceRoot, fsPath);
+    if (this.isExcluded(relativePath) || this.isExcluded(fsPath)) {
+      editor.setDecorations(this.coveredDecorationType, []);
+      editor.setDecorations(this.uncoveredDecorationType, []);
+      return;
+    }
+
+    const fileCoverage = this.findFileCoverage(fsPath);
     if (!fileCoverage) {
       editor.setDecorations(this.coveredDecorationType, []);
       editor.setDecorations(this.uncoveredDecorationType, []);

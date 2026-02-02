@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { minimatch } from 'minimatch';
 import {
   CoverageReport,
   FileCoverage,
@@ -17,11 +18,30 @@ export class CoverageDecorationProvider implements vscode.FileDecorationProvider
   private coverageReport: CoverageReport | null = null;
   private thresholds: ThresholdConfig;
   private enabled: boolean = true;
+  private excludePatterns: string[] = [];
   private fileCoverageCache: Map<string, FileCoverage> = new Map();
   private dirCoverageCache: Map<string, DirectoryCoverage> = new Map();
 
-  constructor(thresholds: ThresholdConfig) {
+  constructor(thresholds: ThresholdConfig, excludePatterns: string[] = []) {
     this.thresholds = thresholds;
+    this.excludePatterns = excludePatterns;
+  }
+
+  updateExcludePatterns(patterns: string[]): void {
+    this.excludePatterns = patterns;
+    this._onDidChangeFileDecorations.fire(undefined);
+  }
+
+  private isExcluded(filePath: string): boolean {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    
+    for (const pattern of this.excludePatterns) {
+      if (minimatch(normalizedPath, pattern, { dot: true })) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   updateCoverage(report: CoverageReport | null): void {
@@ -111,13 +131,19 @@ export class CoverageDecorationProvider implements vscode.FileDecorationProvider
 
     const fsPath = uri.fsPath;
     
-    if (!fsPath.endsWith('.go') || fsPath.endsWith('_test.go')) {
+    // Only process .go files
+    if (!fsPath.endsWith('.go')) {
       return undefined;
     }
 
     const normalizedFsPath = fsPath.replace(/\\/g, '/').toLowerCase();
     const relativePath = path.relative(this.coverageReport.workspaceRoot, fsPath)
       .replace(/\\/g, '/').toLowerCase();
+
+    // Check exclude patterns
+    if (this.isExcluded(relativePath) || this.isExcluded(fsPath)) {
+      return undefined;
+    }
 
     let result: FileCoverage | undefined;
     

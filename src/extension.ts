@@ -30,7 +30,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   coverageService = new CoverageService(workspaceRoot);
   await coverageService.initialize();
 
-  decorationProvider = new CoverageDecorationProvider(thresholds);
+  decorationProvider = new CoverageDecorationProvider(thresholds, config.excludePatterns);
   context.subscriptions.push(
     vscode.window.registerFileDecorationProvider(decorationProvider)
   );
@@ -42,7 +42,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   context.subscriptions.push(treeView);
 
-  inlineCoverageProvider = new InlineCoverageProvider();
+  inlineCoverageProvider = new InlineCoverageProvider(config.excludePatterns);
   context.subscriptions.push(inlineCoverageProvider);
 
   statusBarManager = new StatusBarManager(thresholds);
@@ -99,10 +99,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         
         decorationProvider.updateThresholds(newThresholds);
         decorationProvider.setEnabled(newConfig.showDecorations);
+        decorationProvider.updateExcludePatterns(newConfig.excludePatterns);
         
         treeProvider.updateThresholds(newThresholds);
         
         inlineCoverageProvider.setEnabled(newConfig.showInlineHints);
+        inlineCoverageProvider.updateExcludePatterns(newConfig.excludePatterns);
         
         statusBarManager.updateThresholds(newThresholds);
       }
