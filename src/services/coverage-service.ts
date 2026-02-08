@@ -2,10 +2,11 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as cp from 'child_process';
 import * as os from 'os';
+import { minimatch } from 'minimatch';
 import { GoCoverageParser } from '../parsers/go-coverage-parser';
 import { LcovParser } from '../parsers/lcov-parser';
 import { PathResolver } from '../utils/path-resolver';
-import { CoverageReport, CoverageConfig, ParseResult } from '../models/coverage';
+import { CoverageReport, CoverageConfig, ParseResult, FileCoverage, DirectoryCoverage } from '../models/coverage';
 
 export class CoverageService {
   private goCoverageParser: GoCoverageParser;
@@ -14,12 +15,17 @@ export class CoverageService {
   private currentReport: CoverageReport | null = null;
   private workspaceRoot: string;
   private goPath: string | null = null;
+  private excludePatterns: string[] = [];
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
     this.pathResolver = new PathResolver(workspaceRoot);
     this.goCoverageParser = new GoCoverageParser(this.pathResolver);
     this.lcovParser = new LcovParser(this.pathResolver);
+  }
+
+  setExcludePatterns(patterns: string[]): void {
+    this.excludePatterns = patterns;
   }
 
   async initialize(): Promise<void> {
@@ -115,10 +121,132 @@ export class CoverageService {
     const result = await parser.parse(absolutePath, this.workspaceRoot);
 
     if (result.success && result.report) {
+      // Apply exclude patterns to filter out unwanted files
+      this.filterReport(result.report);
       this.currentReport = result.report;
     }
 
     return result;
+  }
+
+  private isExcluded(filePath: string): boolean {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    
+    for (const pattern of this.excludePatterns) {
+      if (minimatch(normalizedPath, pattern, { dot: true })) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  private filterReport(report: CoverageReport): void {
+    // Filter out excluded files
+    const filesToDelete: string[] = [];
+    
+    for (const [absolutePath, file] of report.files) {
+      const relativePath = path.relative(this.workspaceRoot, absolutePath).replace(/\\/g, '/');
+      
+      if (this.isExcluded(relativePath) || this.isExcluded(file.filePath)) {
+        filesToDelete.push(absolutePath);
+      }
+    }
+
+    for (const filePath of filesToDelete) {
+      report.files.delete(filePath);
+    }
+
+    // Rebuild directory tree after filtering
+    this.rebuildDirectoryTree(report);
+
+    // Recalculate total coverage
+    let totalStatements = 0;
+    let coveredStatements = 0;
+    
+    for (const file of report.files.values()) {
+      totalStatements += file.totalStatements;
+      coveredStatements += file.coveredStatements;
+    }
+
+    report.totalStatements = totalStatements;
+    report.coveredStatements = coveredStatements;
+    report.totalCoverage = totalStatements > 0 ? (coveredStatements / totalStatements) * 100 : 0;
+  }
+
+  private rebuildDirectoryTree(report: CoverageReport): void {
+    const directories = new Map<string, DirectoryCoverage>();
+
+    // Build directory structure from remaining files
+    for (const file of report.files.values()) {
+      const relativePath = path.relative(this.workspaceRoot, file.absolutePath).replace(/\\/g, '/');
+      const parts = relativePath.split('/').filter(p => p.length > 0);
+      
+      let currentPath = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        
+        if (!directories.has(currentPath)) {
+          directories.set(currentPath, {
+            path: currentPath,
+            name: part,
+            files: [],
+            subdirectories: [],
+            coveredStatements: 0,
+            totalStatements: 0,
+            percentage: 0
+          });
+        }
+      }
+    }
+
+    // Assign files to directories
+    for (const file of report.files.values()) {
+      const relativePath = path.relative(this.workspaceRoot, file.absolutePath).replace(/\\/g, '/');
+      const dirPath = path.dirname(relativePath).replace(/\\/g, '/');
+      
+      if (dirPath && dirPath !== '.' && directories.has(dirPath)) {
+        const dir = directories.get(dirPath)!;
+        dir.files.push(file);
+      }
+    }
+
+    // Build parent-child relationships
+    for (const [dirPath, dir] of directories) {
+      const parentPath = path.dirname(dirPath).replace(/\\/g, '/');
+      if (parentPath && parentPath !== '.' && directories.has(parentPath)) {
+        const parent = directories.get(parentPath)!;
+        if (!parent.subdirectories.find(d => d.path === dirPath)) {
+          parent.subdirectories.push(dir);
+        }
+      }
+    }
+
+    // Calculate directory coverages (bottom-up)
+    const sortedDirs = Array.from(directories.entries())
+      .sort((a, b) => b[0].split('/').length - a[0].split('/').length);
+
+    for (const [, dir] of sortedDirs) {
+      let totalStatements = 0;
+      let coveredStatements = 0;
+
+      for (const file of dir.files) {
+        totalStatements += file.totalStatements;
+        coveredStatements += file.coveredStatements;
+      }
+
+      for (const subdir of dir.subdirectories) {
+        totalStatements += subdir.totalStatements;
+        coveredStatements += subdir.coveredStatements;
+      }
+
+      dir.totalStatements = totalStatements;
+      dir.coveredStatements = coveredStatements;
+      dir.percentage = totalStatements > 0 ? (coveredStatements / totalStatements) * 100 : 0;
+    }
+
+    report.directories = directories;
   }
 
   async runTestsWithCoverage(config: CoverageConfig, packagePath?: string): Promise<ParseResult> {

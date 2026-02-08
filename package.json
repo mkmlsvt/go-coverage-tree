@@ -2,7 +2,7 @@
   "name": "go-coverage-tree",
   "displayName": "Go Coverage Tree",
   "description": "Visualize Go test coverage in file explorer with GoLand-like decorations and percentage bars",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "mkmlsvt",
   "license": "MIT",
   "repository": {

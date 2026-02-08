@@ -28,6 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const thresholds = getThresholds(config);
 
   coverageService = new CoverageService(workspaceRoot);
+  coverageService.setExcludePatterns(config.excludePatterns);
   await coverageService.initialize();
 
   decorationProvider = new CoverageDecorationProvider(thresholds, config.excludePatterns);
@@ -92,10 +93,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
+    vscode.workspace.onDidChangeConfiguration(async e => {
       if (e.affectsConfiguration('goCoverage')) {
         const newConfig = getConfig();
         const newThresholds = getThresholds(newConfig);
+        
+        // Update service exclude patterns and reload coverage
+        coverageService.setExcludePatterns(newConfig.excludePatterns);
         
         decorationProvider.updateThresholds(newThresholds);
         decorationProvider.setEnabled(newConfig.showDecorations);
@@ -107,6 +111,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         inlineCoverageProvider.updateExcludePatterns(newConfig.excludePatterns);
         
         statusBarManager.updateThresholds(newThresholds);
+        
+        // Reload coverage to apply new exclude patterns
+        await loadExistingCoverage(workspaceRoot, newConfig, onCoverageUpdated);
       }
     })
   );
