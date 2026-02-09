@@ -1,6 +1,6 @@
 # Go Coverage Tree
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.2-blue)
 ![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 

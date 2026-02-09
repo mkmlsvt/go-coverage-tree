@@ -20,6 +20,7 @@ let coverageCommands: CoverageCommands;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
+    registerNoopCommands(context);
     return;
   }
 
@@ -29,7 +30,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   coverageService = new CoverageService(workspaceRoot);
   coverageService.setExcludePatterns(config.excludePatterns);
-  await coverageService.initialize();
 
   decorationProvider = new CoverageDecorationProvider(thresholds, config.excludePatterns);
   context.subscriptions.push(
@@ -70,6 +70,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   coverageCommands.registerCommands();
 
+  try {
+    await coverageService.initialize();
+  } catch (err) {
+    console.error('[Go Coverage] Failed to initialize coverage service:', err);
+  }
+
   if (config.autoWatch) {
     coverageWatcher = new CoverageWatcher(
       async (filePath: string) => {
@@ -98,7 +104,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const newConfig = getConfig();
         const newThresholds = getThresholds(newConfig);
         
-        // Update service exclude patterns and reload coverage
         coverageService.setExcludePatterns(newConfig.excludePatterns);
         
         decorationProvider.updateThresholds(newThresholds);
@@ -112,7 +117,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         
         statusBarManager.updateThresholds(newThresholds);
         
-        // Reload coverage to apply new exclude patterns
         await loadExistingCoverage(workspaceRoot, newConfig, onCoverageUpdated);
       }
     })
@@ -175,6 +179,26 @@ function getThresholds(config: CoverageConfig): ThresholdConfig {
     low: config.threshold.low,
     medium: config.threshold.medium
   };
+}
+
+function registerNoopCommands(context: vscode.ExtensionContext): void {
+  const commandIds = [
+    'goCoverage.runTests',
+    'goCoverage.runPackageTests',
+    'goCoverage.loadCoverage',
+    'goCoverage.clearCoverage',
+    'goCoverage.showReport',
+    'goCoverage.refresh',
+    'goCoverage.toggleDecorations'
+  ];
+
+  for (const commandId of commandIds) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(commandId, () => {
+        vscode.window.showWarningMessage('Please open a workspace folder to use Go Coverage.');
+      })
+    );
+  }
 }
 
 export function deactivate(): void {
