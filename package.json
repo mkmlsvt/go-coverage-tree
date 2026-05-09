@@ -2,7 +2,7 @@
   "name": "go-coverage-tree",
   "displayName": "Go Coverage Tree",
   "description": "Visualize Go test coverage in file explorer with GoLand-like decorations and percentage bars",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "mkmlsvt",
   "license": "MIT",
   "repository": {
@@ -180,13 +180,17 @@
         },
         "goCoverage.excludePatterns": {
           "type": "array",
+          "items": {
+            "type": "string"
+          },
           "default": [
             "**/vendor/**",
             "**/*_test.go",
             "**/mock_*.go",
             "**/mocks/**"
           ],
-          "description": "Glob patterns to exclude from coverage display"
+          "description": "Glob patterns to exclude from coverage display. Supports minimatch glob syntax (e.g. '**/*_templ.go', 'internal/generated/**'). Single-segment patterns like '*_templ.go' also work and match any depth.",
+          "scope": "resource"
         }
       }
     },
@@ -254,6 +258,7 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
-    "minimatch": "^9.0.3"
+    "minimatch": "^9.0.3",
+    "vsce": "^2.15.0"
   }
 }

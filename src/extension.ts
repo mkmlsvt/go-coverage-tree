@@ -103,21 +103,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (e.affectsConfiguration('goCoverage')) {
         const newConfig = getConfig();
         const newThresholds = getThresholds(newConfig);
-        
-        coverageService.setExcludePatterns(newConfig.excludePatterns);
-        
+
+        // Update patterns and immediately re-filter the already-loaded report.
+        // Only fall back to a full disk reload when no report is in memory.
+        const refiltered = coverageService.setExcludePatterns(newConfig.excludePatterns);
+
         decorationProvider.updateThresholds(newThresholds);
         decorationProvider.setEnabled(newConfig.showDecorations);
         decorationProvider.updateExcludePatterns(newConfig.excludePatterns);
-        
+
         treeProvider.updateThresholds(newThresholds);
-        
+
         inlineCoverageProvider.setEnabled(newConfig.showInlineHints);
         inlineCoverageProvider.updateExcludePatterns(newConfig.excludePatterns);
-        
+
         statusBarManager.updateThresholds(newThresholds);
-        
-        await loadExistingCoverage(workspaceRoot, newConfig, onCoverageUpdated);
+
+        if (refiltered) {
+          onCoverageUpdated(refiltered);
+        } else {
+          await loadExistingCoverage(workspaceRoot, newConfig, onCoverageUpdated);
+        }
       }
     })
   );

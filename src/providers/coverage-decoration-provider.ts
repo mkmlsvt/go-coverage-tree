@@ -34,13 +34,11 @@ export class CoverageDecorationProvider implements vscode.FileDecorationProvider
 
   private isExcluded(filePath: string): boolean {
     const normalizedPath = filePath.replace(/\\/g, '/');
-    
     for (const pattern of this.excludePatterns) {
-      if (minimatch(normalizedPath, pattern, { dot: true })) {
+      if (minimatch(normalizedPath, pattern, { dot: true, matchBase: true })) {
         return true;
       }
     }
-    
     return false;
   }
 
