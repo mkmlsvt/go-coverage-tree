@@ -139,10 +139,8 @@ export class CoverageCommands {
 
   private async refresh(): Promise<void> {
     const config = this.getConfig();
-    const coverageFilePath = config.coverageFilePath;
-    
-    const result = await this.coverageService.loadCoverage(coverageFilePath);
-    
+    this.coverageService.setExcludePatterns(config.excludePatterns);
+    const result = await this.coverageService.loadCoverage(config.coverageFilePath);
     if (result.success && result.report) {
       this.onCoverageUpdated(result.report);
     }

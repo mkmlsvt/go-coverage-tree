@@ -12,6 +12,7 @@ export class CoverageService {
   private goCoverageParser: GoCoverageParser;
   private lcovParser: LcovParser;
   private pathResolver: PathResolver;
+  private rawReport: CoverageReport | null = null;
   private currentReport: CoverageReport | null = null;
   private workspaceRoot: string;
   private goPath: string | null = null;
@@ -24,8 +25,14 @@ export class CoverageService {
     this.lcovParser = new LcovParser(this.pathResolver);
   }
 
-  setExcludePatterns(patterns: string[]): void {
+  // Returns a re-filtered report if one is already loaded, null otherwise.
+  setExcludePatterns(patterns: string[]): CoverageReport | null {
     this.excludePatterns = patterns;
+    if (this.rawReport) {
+      this.currentReport = this.createFilteredReport(this.rawReport);
+      return this.currentReport;
+    }
+    return null;
   }
 
   async initialize(): Promise<void> {
@@ -121,23 +128,33 @@ export class CoverageService {
     const result = await parser.parse(absolutePath, this.workspaceRoot);
 
     if (result.success && result.report) {
-      // Apply exclude patterns to filter out unwanted files
-      this.filterReport(result.report);
-      this.currentReport = result.report;
+      this.rawReport = result.report;
+      this.currentReport = this.createFilteredReport(result.report);
+      result.report = this.currentReport;
     }
 
     return result;
   }
 
+  private createFilteredReport(rawReport: CoverageReport): CoverageReport {
+    // Shallow-copy the files Map so filterReport can delete from the copy
+    // without touching the stored rawReport.
+    const copy: CoverageReport = {
+      ...rawReport,
+      files: new Map(rawReport.files),
+      directories: new Map(),
+    };
+    this.filterReport(copy);
+    return copy;
+  }
+
   private isExcluded(filePath: string): boolean {
     const normalizedPath = filePath.replace(/\\/g, '/');
-    
     for (const pattern of this.excludePatterns) {
-      if (minimatch(normalizedPath, pattern, { dot: true })) {
+      if (minimatch(normalizedPath, pattern, { dot: true, matchBase: true })) {
         return true;
       }
     }
-    
     return false;
   }
 
@@ -324,6 +341,7 @@ export class CoverageService {
   }
 
   clearCoverage(): void {
+    this.rawReport = null;
     this.currentReport = null;
   }
 
